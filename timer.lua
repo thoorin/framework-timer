@@ -153,7 +153,7 @@ function timer.pause( whatToPause, _pauseAll )
 	end
 end
 
-function timer.resume( whatToResume, _resumeAll )
+function timer.resume( whatToResume, _resumeAll, _i )
 	local t, msg = type( whatToResume )
 	if "string" ~= t and "table" ~= t then
 		error("timer.resume(): invalid timerId or tag (table or string expected, got "..t..")", 2)
@@ -187,7 +187,7 @@ function timer.resume( whatToResume, _resumeAll )
 				local fireTime = getTimer() + timeLeft
 				v._time = fireTime
 				v._pauseTime = nil
-				tRemove( timer._pausedTimers, i )
+				tRemove( timer._pausedTimers, _i or i )
 				
 				if ( v._removed ) then
 					timer._insert( timer, v, fireTime )
@@ -213,7 +213,7 @@ end
 function timer.resumeAll()
 	local pausedTimers = timer._pausedTimers
 	for i = #pausedTimers, 1, -1 do
-		timer.resume( pausedTimers[i], true )
+		timer.resume( pausedTimers[i], true, i )
 	end
 end
 
@@ -229,6 +229,66 @@ function timer.cancelAll()
 	for i = #toInsert, 1, -1 do
 		timer.cancel( toInsert[i][2] )
 	end
+end
+
+local function _getTimer( timerOrTag )
+	local t = type( timerOrTag )
+
+	if ( t ~= "string" and t ~= "table" ) then
+		error( "_getTimer(): invalid type for timerOrTag (table or string expected, got "..t..")", 3 )
+	end
+	
+	local _timer, tag
+
+	if ( t == "table" ) then
+		_timer = timerOrTag
+	else
+		tag = timerOrTag
+	end
+
+	-- if the tag was specified, then search for the timer with given tag
+	if ( tag ) then
+		local function _search( list )
+			for i = 1, #list do
+				if ( list[i]._tag == tag ) then
+					return list[i]
+				end
+			end
+		end
+		
+		_timer = _search( timer._runlist ) or _search( timer._pausedTimers ) or _search( toInsert )
+	
+		if ( not _timer ) then
+			error( "_getTimer(): invalid tag, no timer with tag "..tag.." has been found", 3 )
+		end	
+	end
+
+	return _timer
+end
+
+
+function timer.getState( timerOrTag )
+	local _timer = _getTimer( timerOrTag )
+
+	if ( _timer._cancelled ) then
+		return "cancelled"
+	elseif ( _timer._expired ) then
+		return "expired"
+	elseif ( _timer._pauseTime ) then
+		return "paused"
+	else
+		return "running"
+	end
+end
+
+function timer.getRemainingTime( timerOrTag )
+	local _timer = _getTimer( timerOrTag )
+
+	if ( _timer._expired ) then
+		return - 1
+	end
+
+	return _timer._time - getTimer()
 end
 
 function timer._updateNextTime()
